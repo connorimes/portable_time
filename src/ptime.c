@@ -1,4 +1,5 @@
 #include <inttypes.h>
+#include <stdlib.h>
 #include <time.h>
 #if defined(__MACH__)
 #include <mach/clock.h>
@@ -22,6 +23,8 @@ int ptime_clock_gettime(struct timespec* ts) {
   return 0;
 #elif defined(_WIN32)
   // TODO
+  fprintf(stderr, "Unimplemented!\n")
+  exit(1);
 #else
   return clock_gettime(CLOCK_REALTIME, ts);
 #endif
@@ -44,6 +47,8 @@ static const uint64_t ONE_BILLION_U64 = 1000000000;
   return mts.tv_sec * ONE_BILLION_U64 + mts.tv_nsec;
 #elif defined(_WIN32)
   // TODO
+  fprintf(stderr, "Unimplemented!\n")
+  exit(1);
 #else
   struct timespec ts;
   // CLOCK_REALTIME is always supported, this should never fail
