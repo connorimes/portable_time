@@ -15,6 +15,9 @@ if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     find_library(LIBRT NAMES rt)
   endif()
 endif()
+if(NOT LIBRT)
+  set(LIBRT "")
+endif()
 
 include_directories(${PROJECT_SOURCE_DIR}/inc)
 
