@@ -1,3 +1,10 @@
+/*
+ * Some various functions for getting timestamps.
+ *
+ * Many thanks to online sources, like:
+ *   http://stackoverflow.com/questions/5167269/clock-gettime-alternative-in-mac-os-x
+ *   http://stackoverflow.com/questions/5404277/porting-clock-gettime-to-windows
+ */
 #include <inttypes.h>
 #include <stdlib.h>
 #include <time.h>
@@ -9,8 +16,25 @@
 #include <Windows.h>
 #endif
 
+static const uint64_t ONE_BILLION_U64 = 1000000000;
+
+
+#if defined(__MACH__)
+static int clock_gettime_mach(int dummy, struct timespec* ts) {
+  (void) dummy;
+  // OS X does not have clock_gettime, use clock_get_time
+  clock_serv_t cclock;
+  mach_timespec_t mts;
+  host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
+  clock_get_time(cclock, &mts);
+  mach_port_deallocate(mach_task_self(), cclock);
+  ts->tv_sec = mts.tv_sec;
+  ts->tv_nsec = mts.tv_nsec;
+  return 0;
+}
+#endif
+
 #if defined(_WIN32)
-// See http://stackoverflow.com/questions/5404277/porting-clock-gettime-to-windows
 
 static LARGE_INTEGER getFILETIMEoffset() {
   SYSTEMTIME s;
@@ -31,13 +55,13 @@ static LARGE_INTEGER getFILETIMEoffset() {
   return t;
 }
 
-static int clock_gettime_win32(int dummy, struct timespec *ts) {
+static int clock_gettime_win32(int dummy, struct timespec* ts) {
   (void) dummy;
   LARGE_INTEGER           t;
   FILETIME                f;
-  double                  microseconds;
+  double                  nanoseconds;
   static LARGE_INTEGER    offset;
-  static double           frequencyToMicroseconds;
+  static double           frequencyToNanoseconds;
   static int              initialized = 0;
   static BOOL             usePerformanceCounter = 0;
 
@@ -47,10 +71,10 @@ static int clock_gettime_win32(int dummy, struct timespec *ts) {
     usePerformanceCounter = QueryPerformanceFrequency(&performanceFrequency);
     if (usePerformanceCounter) {
       QueryPerformanceCounter(&offset);
-      frequencyToMicroseconds = (double)performanceFrequency.QuadPart / 1000000.;
+      frequencyToNanoseconds = (double) performanceFrequency.QuadPart / 1000.;
     } else {
       offset = getFILETIMEoffset();
-      frequencyToMicroseconds = 10.;
+      frequencyToNanoseconds = 0.010;
     }
   }
   if (usePerformanceCounter) {
@@ -63,24 +87,17 @@ static int clock_gettime_win32(int dummy, struct timespec *ts) {
   }
 
   t.QuadPart -= offset.QuadPart;
-  microseconds = (double)t.QuadPart / frequencyToMicroseconds;
-  t.QuadPart = microseconds;
-  ts->tv_sec = t.QuadPart / 1000000;
-  ts->tv_usec = t.QuadPart % 1000000;
+  nanoseconds = (double) t.QuadPart / frequencyToNanoseconds;
+  t.QuadPart = nanoseconds;
+  ts->tv_sec = t.QuadPart / 1000000000;
+  ts->tv_nsec = t.QuadPart % 1000000000;
   return 0;
 }
 #endif
 
 int ptime_clock_gettime(struct timespec* ts) {
 #if defined(__MACH__)
-  clock_serv_t cclock;
-  mach_timespec_t mts;
-  host_get_clock_service(mach_host_self(), SYSTEM_CLOCK, &cclock);
-  clock_get_time(cclock, &mts);
-  mach_port_deallocate(mach_task_self(), cclock);
-  ts->tv_sec = mts.tv_sec;
-  ts->tv_nsec = mts.tv_nsec;
-  return 0;
+  return clock_gettime_mach(0, ts);
 #elif defined(_WIN32)
   return clock_gettime_win32(0, ts);
 #else
@@ -89,29 +106,19 @@ int ptime_clock_gettime(struct timespec* ts) {
 }
 
 uint64_t ptime_to_ns(struct timespec* ts) {
-  static const uint64_t ONE_BILLION_U64 = 1000000000;
+  // must use a const or cast a literal - using a simple literal can overflow!
   return ts->tv_sec * ONE_BILLION_U64 + ts->tv_nsec;
 }
 
 uint64_t ptime_gettime_ns(void) {
-static const uint64_t ONE_BILLION_U64 = 1000000000;
+  struct timespec ts;
 #if defined(__MACH__)
-  // OS X does not have clock_gettime, use clock_get_time
-  clock_serv_t cclock;
-  mach_timespec_t mts;
-  host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
-  clock_get_time(cclock, &mts);
-  mach_port_deallocate(mach_task_self(), cclock);
-  return mts.tv_sec * ONE_BILLION_U64 + mts.tv_nsec;
+  clock_gettime_mach(0, &ts);
 #elif defined(_WIN32)
-  struct timespec ts;
   clock_gettime_win32(0, &ts);
-  return ts.tv_sec * ONE_BILLION_U64 + ts.tv_nsec;
 #else
-  struct timespec ts;
   // CLOCK_REALTIME is always supported, this should never fail
   clock_gettime(CLOCK_REALTIME, &ts);
-  // must use a const or cast a literal - using a simple literal can overflow!
-  return ts.tv_sec * ONE_BILLION_U64 + ts.tv_nsec;
 #endif
+  return ptime_to_ns(&ts);
 }
