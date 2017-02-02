@@ -12,22 +12,21 @@
 #include <inttypes.h>
 #include <stdlib.h>
 #include <time.h>
+
+/* begin platform-specific headers and definitions */
 #if defined(__MACH__)
+
 #include <mach/clock.h>
 #include <mach/mach.h>
-#if !defined(__DARWIN_C_LEVEL) || __DARWIN_C_LEVEL < 199309L
-typedef int clockid_t;
-#endif
-#endif // __MACH__
-#if defined(_WIN32)
+
+#elif defined(_WIN32)
+
 #include <Windows.h>
+
 typedef int clockid_t;
 #define CLOCK_REALTIME 0
-#endif // _WIN32
 
-#define ONE_THOUSAND 1000
-#define ONE_MILLION  1000000
-#define ONE_BILLION  1000000000
+#else
 
 static const clockid_t PTIME_CLOCKID_T_MONOTONIC =
 #if defined(CLOCK_MONOTONIC_PRECISE)
@@ -48,8 +47,15 @@ static const clockid_t PTIME_CLOCKID_T_MONOTONIC =
 #endif
 ;
 
+#endif
+/* end platform-specific headers and definitions */
+
+#define ONE_THOUSAND 1000
+#define ONE_MILLION  1000000
+#define ONE_BILLION  1000000000
+
 #if defined(__MACH__)
-static int clock_gettime_mach(clockid_t clk_id, struct timespec* ts) {
+static int clock_gettime_mach(clock_id_t clk_id, struct timespec* ts) {
   // OS X does not have clock_gettime, use clock_get_time
   clock_serv_t cclock;
   mach_timespec_t mts;
@@ -67,7 +73,7 @@ static int clock_gettime_mach(clockid_t clk_id, struct timespec* ts) {
 
 
 #if defined(_WIN32)
-int clock_gettime_win32(clockid_t dummy, struct timespec* ts) {
+static int clock_gettime_win32(clockid_t dummy, struct timespec* ts) {
   (void) dummy;
   static BOOL g_first_time = 1;
   static LARGE_INTEGER g_counts_per_sec;
@@ -86,7 +92,7 @@ int clock_gettime_win32(clockid_t dummy, struct timespec* ts) {
   return 0;
 }
 
-int ptime_sleep_us_win32(__int64 usec) {
+static int ptime_sleep_us_win32(__int64 usec) {
   HANDLE timer;
   LARGE_INTEGER ft;
   // Convert to 100 nanosecond interval, negative value indicates relative time
