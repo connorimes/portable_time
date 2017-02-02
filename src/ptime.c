@@ -72,6 +72,24 @@ static int clock_gettime_mach(clock_id_t clk_id, struct timespec* ts) {
 #endif // __MACH__
 
 #if defined(_WIN32)
+static LARGE_INTEGER getFILETIMEoffset() {
+  SYSTEMTIME s;
+  FILETIME f;
+  LARGE_INTEGER t;
+  s.wYear = 1970;
+  s.wMonth = 1;
+  s.wDay = 1;
+  s.wHour = 0;
+  s.wMinute = 0;
+  s.wSecond = 0;
+  s.wMilliseconds = 0;
+  SystemTimeToFileTime(&s, &f);
+  t.QuadPart = f.dwHighDateTime;
+  t.QuadPart <<= 32;
+  t.QuadPart |= f.dwLowDateTime;
+  return t;
+}
+
 static int clock_gettime_realtime_win32(struct timespec* ts) {
   static LONG g_first_time = 1;
   static LARGE_INTEGER offset;
