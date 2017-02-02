@@ -16,9 +16,6 @@
 #include <Windows.h>
 #endif
 
-static const uint64_t ONE_BILLION_U64 = 1000000000;
-
-
 #if defined(__MACH__)
 static int clock_gettime_mach(int dummy, struct timespec* ts) {
   (void) dummy;
@@ -35,62 +32,21 @@ static int clock_gettime_mach(int dummy, struct timespec* ts) {
 #endif
 
 #if defined(_WIN32)
-
-static LARGE_INTEGER getFILETIMEoffset() {
-  SYSTEMTIME s;
-  FILETIME f;
-  LARGE_INTEGER t;
-
-  s.wYear = 1970;
-  s.wMonth = 1;
-  s.wDay = 1;
-  s.wHour = 0;
-  s.wMinute = 0;
-  s.wSecond = 0;
-  s.wMilliseconds = 0;
-  SystemTimeToFileTime(&s, &f);
-  t.QuadPart = f.dwHighDateTime;
-  t.QuadPart <<= 32;
-  t.QuadPart |= f.dwLowDateTime;
-  return t;
-}
-
-static int clock_gettime_win32(int dummy, struct timespec* ts) {
-  (void) dummy;
-  LARGE_INTEGER           t;
-  FILETIME                f;
-  double                  nanoseconds;
-  static LARGE_INTEGER    offset;
-  static double           frequencyToNanoseconds;
-  static int              initialized = 0;
-  static BOOL             usePerformanceCounter = 0;
-
-  if (!initialized) {
-    LARGE_INTEGER performanceFrequency;
-    initialized = 1;
-    usePerformanceCounter = QueryPerformanceFrequency(&performanceFrequency);
-    if (usePerformanceCounter) {
-      QueryPerformanceCounter(&offset);
-      frequencyToNanoseconds = (double) performanceFrequency.QuadPart / 1000.;
-    } else {
-      offset = getFILETIMEoffset();
-      frequencyToNanoseconds = 0.010;
+int clock_gettime_win32(int dummy, struct timespec* ts) {
+  static BOOL g_first_time = 1;
+  static LARGE_INTEGER g_counts_per_sec;
+  LARGE_INTEGER count;
+  if (g_first_time) {
+    g_first_time = 0;
+    if (QueryPerformanceFrequency(&g_counts_per_sec) == 0) {
+      g_counts_per_sec.QuadPart = 0;
     }
   }
-  if (usePerformanceCounter) {
-    QueryPerformanceCounter(&t);
-  } else {
-    GetSystemTimeAsFileTime(&f);
-    t.QuadPart = f.dwHighDateTime;
-    t.QuadPart <<= 32;
-    t.QuadPart |= f.dwLowDateTime;
+  if (g_counts_per_sec.QuadPart <= 0 || QueryPerformanceCounter(&count) == 0) {
+    return -1;
   }
-
-  t.QuadPart -= offset.QuadPart;
-  nanoseconds = (double) t.QuadPart / frequencyToNanoseconds;
-  t.QuadPart = nanoseconds;
-  ts->tv_sec = t.QuadPart / 1000000000;
-  ts->tv_nsec = t.QuadPart % 1000000000;
+  ts->tv_sec = count.QuadPart / g_counts_per_sec.QuadPart;
+  ts->tv_nsec = ((count.QuadPart % g_counts_per_sec.QuadPart) * 1E9) / g_counts_per_sec.QuadPart;
   return 0;
 }
 #endif
@@ -107,6 +63,7 @@ int ptime_clock_gettime(struct timespec* ts) {
 
 uint64_t ptime_to_ns(struct timespec* ts) {
   // must use a const or cast a literal - using a simple literal can overflow!
+  static const uint64_t ONE_BILLION_U64 = 1000000000;
   return ts->tv_sec * ONE_BILLION_U64 + ts->tv_nsec;
 }
 
