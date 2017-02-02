@@ -23,9 +23,6 @@
 
 #include <Windows.h>
 
-typedef int clockid_t;
-#define CLOCK_REALTIME 0
-
 #else
 
 static const clockid_t PTIME_CLOCKID_T_MONOTONIC =
@@ -73,13 +70,13 @@ static int clock_gettime_mach(clock_id_t clk_id, struct timespec* ts) {
 
 
 #if defined(_WIN32)
-static int clock_gettime_win32(clockid_t dummy, struct timespec* ts) {
+static int clock_gettime_win32(int dummy, struct timespec* ts) {
   (void) dummy;
-  static BOOL g_first_time = 1;
+  static LONG g_first_time = 1;
   static LARGE_INTEGER g_counts_per_sec;
   LARGE_INTEGER count;
-  if (g_first_time) {
-    g_first_time = 0;
+  // thread-safe initializer
+  if (InterlockedExchange(&g_first_time, 0)) {
     if (QueryPerformanceFrequency(&g_counts_per_sec) == 0) {
       g_counts_per_sec.QuadPart = 0;
     }
