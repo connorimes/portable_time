@@ -23,6 +23,10 @@
 
 #include <Windows.h>
 
+typedef enum ptime_clock_id_win32 {
+  PTIME_REALTIME, PTIME_MONOTONIC
+} ptime_clock_id_win32;
+
 #else
 
 static const clockid_t PTIME_CLOCKID_T_MONOTONIC =
@@ -53,7 +57,6 @@ static const clockid_t PTIME_CLOCKID_T_MONOTONIC =
 
 #if defined(__MACH__)
 static int clock_gettime_mach(clock_id_t clk_id, struct timespec* ts) {
-  // OS X does not have clock_gettime, use clock_get_time
   clock_serv_t cclock;
   mach_timespec_t mts;
   int ret;
@@ -68,10 +71,32 @@ static int clock_gettime_mach(clock_id_t clk_id, struct timespec* ts) {
 }
 #endif // __MACH__
 
-
 #if defined(_WIN32)
-static int clock_gettime_win32(int dummy, struct timespec* ts) {
-  (void) dummy;
+static int clock_gettime_realtime_win32(struct timespec* ts) {
+  static LONG g_first_time = 1;
+  static LARGE_INTEGER offset;
+  static double frequencyToNanoseconds;
+  FILETIME f;
+  LARGE_INTEGER t;
+  double nanoseconds;
+  // thread-safe initializer
+  if (InterlockedExchange(&g_first_time, 0)) {
+    offset = getFILETIMEoffset();
+    frequencyToNanoseconds = 0.010;
+  }
+  GetSystemTimeAsFileTime(&f);
+  t.QuadPart = f.dwHighDateTime;
+  t.QuadPart <<= 32;
+  t.QuadPart |= f.dwLowDateTime;
+  t.QuadPart -= offset.QuadPart;
+  nanoseconds = (double) t.QuadPart / frequencyToNanoseconds;
+  t.QuadPart = nanoseconds;
+  ts->tv_sec = t.QuadPart / ONE_BILLION;
+  ts->tv_nsec = t.QuadPart % ONE_BILLION;
+  return 0;
+}
+
+static int clock_gettime_monotonic_win32(struct timespec* ts) {
   static LONG g_first_time = 1;
   static LARGE_INTEGER g_counts_per_sec;
   LARGE_INTEGER count;
@@ -87,6 +112,19 @@ static int clock_gettime_win32(int dummy, struct timespec* ts) {
   ts->tv_sec = count.QuadPart / g_counts_per_sec.QuadPart;
   ts->tv_nsec = ((count.QuadPart % g_counts_per_sec.QuadPart) * 1E9) / g_counts_per_sec.QuadPart;
   return 0;
+}
+
+static int clock_gettime_win32(ptime_clock_id_win32 clk_id, struct timespec* ts) {
+  switch(clk_id) {
+    case PTIME_REALTIME:
+      return clock_gettime_realtime_win32(ts);
+    case PTIME_MONOTONIC:
+      return clock_gettime_monotonic_win32(ts);
+    default:
+      break;
+  }
+  errno = EINVAL;
+  return -1;
 }
 
 static int ptime_sleep_us_win32(__int64 usec) {
@@ -111,7 +149,7 @@ int ptime_clock_gettime(struct timespec* ts) {
 #if defined(__MACH__)
   return clock_gettime_mach(CALENDAR_CLOCK, ts);
 #elif defined(_WIN32)
-  return clock_gettime_win32(0, ts);
+  return clock_gettime_win32(PTIME_REALTIME, ts);
 #else
   return clock_gettime(CLOCK_REALTIME, ts);
 #endif
@@ -121,7 +159,7 @@ int ptime_clock_gettime_monotonic(struct timespec* ts) {
 #if defined(__MACH__)
   return clock_gettime_mach(SYSTEM_CLOCK, ts);
 #elif defined(_WIN32)
-  return clock_gettime_win32(0, ts);
+  return clock_gettime_win32(PTIME_MONOTONIC, ts);
 #else
   return clock_gettime(PTIME_CLOCKID_T_MONOTONIC, ts);
 #endif
