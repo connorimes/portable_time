@@ -94,7 +94,7 @@ static int clock_gettime_realtime_win32(struct timespec* ts) {
   FILETIME f;
   LARGE_INTEGER t;
   double nanoseconds;
-  // thread-safe initializer
+  // TODO: thread-safe initializer (currently a second thread can run before init completes)
   if (InterlockedExchange(&g_first_time, 0)) {
     offset = getFILETIMEoffset();
     frequencyToNanoseconds = 0.010;
@@ -115,7 +115,7 @@ static int clock_gettime_monotonic_win32(struct timespec* ts) {
   static LONG g_first_time = 1;
   static LARGE_INTEGER g_counts_per_sec;
   LARGE_INTEGER count;
-  // thread-safe initializer
+  // TODO: thread-safe initializer (currently a second thread can run before init completes)
   if (InterlockedExchange(&g_first_time, 0)) {
     if (QueryPerformanceFrequency(&g_counts_per_sec) == 0) {
       g_counts_per_sec.QuadPart = 0;
@@ -129,11 +129,14 @@ static int clock_gettime_monotonic_win32(struct timespec* ts) {
   return 0;
 }
 
-static int ptime_sleep_us_win32(__int64 usec) {
+static int nanosleep_win32(struct timespec* ts, struct timespec* rem) {
+  (void) rem;
+  __int64 ns = (__int64) ptime_timespec_to_ns(ts);
   HANDLE timer;
   LARGE_INTEGER ft;
   // Convert to 100 nanosecond interval, negative value indicates relative time
-  ft.QuadPart = -(10 * usec);
+  // rounds up to the next interval
+  ft.QuadPart = -((ns / 100) + (ns % 100 ? 1 : 0));
   if ((timer = CreateWaitableTimer(NULL, TRUE, NULL)) == NULL) {
     return -1;
   }
@@ -204,8 +207,7 @@ int ptime_clock_nanosleep(struct timespec* ts, struct timespec* rem) {
 #if defined(__MACH__)
   return nanosleep(ts, rem);
 #elif defined(_WIN32)
-  // TODO: find a more precise approach
-  return ptime_sleep_us_win32(ts->tv_sec * 1e6 + ts->tv_nsec / 1e3);
+  return nanosleep_win32(ts, rem);
 #else
   return clock_nanosleep(CLOCK_REALTIME, 0, ts, rem);
 #endif
