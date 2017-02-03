@@ -12,6 +12,7 @@
 #include <inttypes.h>
 #include <stdlib.h>
 #include <time.h>
+#include "ptime.h"
 
 /* begin platform-specific headers and definitions */
 #if defined(__MACH__)
@@ -23,19 +24,15 @@
 
 #include <Windows.h>
 
-typedef enum ptime_clock_id_win32 {
-  PTIME_REALTIME, PTIME_MONOTONIC
-} ptime_clock_id_win32;
-
 #else
 
 static const clockid_t PTIME_CLOCKID_T_MONOTONIC =
 #if defined(CLOCK_MONOTONIC_PRECISE)
   // BSD
   CLOCK_MONOTONIC_PRECISE
-#elif defined(CLOCK_MONOTONIC_RAW)
-  // Linux
-  CLOCK_MONOTONIC_RAW
+// #elif defined(CLOCK_MONOTONIC_RAW)
+//   // Linux
+//   CLOCK_MONOTONIC_RAW
 #elif defined(CLOCK_HIGHRES)
   // Solaris
   CLOCK_HIGHRES;
@@ -132,19 +129,6 @@ static int clock_gettime_monotonic_win32(struct timespec* ts) {
   return 0;
 }
 
-static int clock_gettime_win32(ptime_clock_id_win32 clk_id, struct timespec* ts) {
-  switch(clk_id) {
-    case PTIME_REALTIME:
-      return clock_gettime_realtime_win32(ts);
-    case PTIME_MONOTONIC:
-      return clock_gettime_monotonic_win32(ts);
-    default:
-      break;
-  }
-  errno = EINVAL;
-  return -1;
-}
-
 static int ptime_sleep_us_win32(__int64 usec) {
   HANDLE timer;
   LARGE_INTEGER ft;
@@ -163,73 +147,92 @@ static int ptime_sleep_us_win32(__int64 usec) {
 }
 #endif // _WIN32
 
-int ptime_clock_gettime(struct timespec* ts) {
-#if defined(__MACH__)
-  return clock_gettime_mach(CALENDAR_CLOCK, ts);
-#elif defined(_WIN32)
-  return clock_gettime_win32(PTIME_REALTIME, ts);
-#else
-  return clock_gettime(CLOCK_REALTIME, ts);
-#endif
-}
-
-int ptime_clock_gettime_monotonic(struct timespec* ts) {
-#if defined(__MACH__)
-  return clock_gettime_mach(SYSTEM_CLOCK, ts);
-#elif defined(_WIN32)
-  return clock_gettime_win32(PTIME_MONOTONIC, ts);
-#else
-  return clock_gettime(PTIME_CLOCKID_T_MONOTONIC, ts);
-#endif
-}
-
-uint64_t ptime_to_ns(struct timespec* ts) {
+uint64_t ptime_timespec_to_ns(struct timespec* ts) {
   // must cast as a simple literal can overflow!
   return ts->tv_sec * (uint64_t) ONE_BILLION + ts->tv_nsec;
 }
 
-uint64_t ptime_gettime_ns(void) {
-  struct timespec ts;
-  if (ptime_clock_gettime(&ts)) {
-    return 0;
-  }
-  return ptime_to_ns(&ts);
+uint64_t ptime_timespec_to_us(struct timespec* ts) {
+  // must cast as a simple literal can overflow!
+  return ts->tv_sec * (uint64_t) ONE_MILLION + (ts->tv_nsec / (uint64_t) ONE_THOUSAND);
 }
 
-int ptime_clock_nanosleep(struct timespec* ts) {
-  // TODO: Sleep for any remaining time if interrupted
+void ptime_ns_to_timespec(uint64_t ns, struct timespec* ts) {
+  ts->tv_sec = ns / (time_t) ONE_BILLION;
+  ts->tv_nsec = ns % (long) ONE_BILLION;
+}
+
+void ptime_us_to_timespec(uint64_t us, struct timespec* ts) {
+  ts->tv_sec = us / (time_t) ONE_MILLION;
+  ts->tv_nsec = (us % (long) ONE_MILLION) * (long) ONE_THOUSAND;
+}
+
+int ptime_clock_gettime(ptime_clock_id clk_id, struct timespec* ts) {
+  switch(clk_id) {
 #if defined(__MACH__)
-  return nanosleep(ts, NULL);
+    case PTIME_REALTIME:
+      return clock_gettime_mach(CALENDAR_CLOCK, ts);
+    case PTIME_MONOTONIC:
+      return clock_gettime_mach(SYSTEM_CLOCK, ts);
+#elif defined(_WIN32)
+    case PTIME_REALTIME:
+      return clock_gettime_realtime_win32(ts);
+    case PTIME_MONOTONIC:
+      return clock_gettime_monotonic_win32(ts);
+#else
+    case PTIME_REALTIME:
+      return clock_gettime(CLOCK_REALTIME, ts);
+    case PTIME_MONOTONIC:
+      return clock_gettime(PTIME_CLOCKID_T_MONOTONIC, ts);
+#endif
+    default:
+      break;
+  }
+  errno = EINVAL;
+  return -1;
+}
+
+uint64_t ptime_gettime_ns(ptime_clock_id clk_id) {
+  struct timespec ts;
+  if (ptime_clock_gettime(clk_id, &ts)) {
+    return 0;
+  }
+  return ptime_timespec_to_ns(&ts);
+}
+
+int ptime_clock_nanosleep(struct timespec* ts, struct timespec* rem) {
+#if defined(__MACH__)
+  return nanosleep(ts, rem);
 #elif defined(_WIN32)
   // TODO: find a more precise approach
   return ptime_sleep_us_win32(ts->tv_sec * 1e6 + ts->tv_nsec / 1e3);
 #else
-  return clock_nanosleep(CLOCK_REALTIME, 0, ts, NULL);
+  return clock_nanosleep(CLOCK_REALTIME, 0, ts, rem);
 #endif
 }
 
 int ptime_sleep_us(uint64_t us) {
   struct timespec ts;
-  if (us == 0) {
-    return 0;
-  }
-  ts.tv_sec = us / (time_t) ONE_MILLION;
-  ts.tv_nsec = (us % (long) ONE_MILLION) * (long) ONE_THOUSAND;
-  return ptime_clock_nanosleep(&ts);
+  ptime_us_to_timespec(us, &ts);
+  return ptime_clock_nanosleep(&ts, NULL);
 }
 
-int ptime_sleep_us_monotonic(uint64_t us) {
-#if defined(__MACH__) || defined(_WIN32)
-  // TODO: monotonic sleeping
-  return ptime_sleep_us(us);
-#else
+int ptime_sleep_us_no_interrupt(uint64_t us) {
   int ret;
   struct timespec ts;
-  ts.tv_sec = us % (time_t) ONE_THOUSAND;
-  if (us == 0) {
-    return 0;
+#if defined(__MACH__) || defined(_WIN32)
+  struct timespec rem;
+  ptime_ns_to_timespec(0, &rem);
+  // try to sleep for the requested period of time
+  ptime_us_to_timespec(us, &ts);
+  while ((ret = ptime_clock_nanosleep(&ts, &rem)) != 0 && errno == EINTR) {
+    // sleep some more
+    ts.tv_sec = rem.tv_sec;
+    ts.tv_nsec = rem.tv_nsec;
   }
-  if (ptime_clock_gettime_monotonic(&ts)) {
+#else
+  // keep sleeping until a time in the future (now + requested time interval)
+  if (clock_gettime(PTIME_CLOCKID_T_MONOTONIC, &ts)) {
     return -1;
   }
   ts.tv_sec += us / (time_t) ONE_MILLION;
@@ -238,8 +241,7 @@ int ptime_sleep_us_monotonic(uint64_t us) {
     ts.tv_nsec -= (long) ONE_BILLION;
     ts.tv_sec++;
   }
-  // if interrupted, continue sleeping until the time in the future
   while ((ret = clock_nanosleep(PTIME_CLOCKID_T_MONOTONIC, TIMER_ABSTIME, &ts, NULL)) == EINTR);
-  return ret;
 #endif
+  return ret;
 }
