@@ -10,10 +10,6 @@
 #define ONE_MILLION 1000000
 #define ONE_THOUSAND 1000
 
-static const uint64_t ONE_BILLION_U64 = (uint64_t) ONE_BILLION;
-static const uint64_t ONE_MILLION_U64 = (uint64_t) ONE_MILLION;
-static const uint64_t ONE_THOUSAND_U64 = (uint64_t) ONE_THOUSAND;
-
 #define SEC 3
 #define NSEC 987654321
 #define USEC_NSEC NSEC / ONE_THOUSAND * ONE_THOUSAND
@@ -22,6 +18,13 @@ static const time_t SEC_U64 = (uint64_t) SEC;
 static const uint64_t NSEC_U64 = (uint64_t) NSEC;
 static const uint64_t TOTAL_NSEC_U64 = (uint64_t) SEC * ONE_BILLION + NSEC;
 static const uint64_t TOTAL_USEC_U64 = (uint64_t) SEC * ONE_MILLION + NSEC / ONE_THOUSAND;
+
+static const uint64_t MAX_DUMMY_ITERS = (uint64_t) ONE_MILLION;
+
+static void dummy_work() {
+  uint64_t i;
+  for (i = 0; i < MAX_DUMMY_ITERS; i++);
+}
 
 static void verify_sleep(uint64_t expected_us, uint64_t actual_us, int* ret) {
   if (actual_us < expected_us) {
@@ -38,6 +41,7 @@ static void verify_sleep(uint64_t expected_us, uint64_t actual_us, int* ret) {
 int main(void) {
   struct timespec ts;
   uint64_t ns1, ns2;
+  int64_t elapsed;
   int ret = 0;
 
   /* Test conversions */
@@ -75,11 +79,21 @@ int main(void) {
   }
   printf("ptime_clock_gettime:PTIME_REALTIME: %ld sec, %ld ns\n", ts.tv_sec, ts.tv_nsec);
 
+  dummy_work();
+
+  elapsed = ptime_gettime_elapsed_ns(PTIME_REALTIME, &ts);
+  printf("ptime_gettime_elapsed_ns:PTIME_REALTIME: %"PRIi64" ns\n", elapsed);
+
   if (ptime_clock_gettime(PTIME_MONOTONIC, &ts)) {
     perror("ERROR: ptime_clock_gettime:PTIME_MONOTONIC");
     ret = 1;
   }
   printf("ptime_clock_gettime:PTIME_MONOTONIC: %ld sec, %ld ns\n", ts.tv_sec, ts.tv_nsec);
+
+  dummy_work();
+
+  elapsed = ptime_gettime_elapsed_us(PTIME_MONOTONIC, &ts);
+  printf("ptime_gettime_elapsed_us:PTIME_MONOTONIC: %"PRIi64" us\n", elapsed);
 
   ns1 = ptime_gettime_ns(PTIME_REALTIME);
   if (ns1 == 0) {
@@ -95,36 +109,51 @@ int main(void) {
   }
   printf("ptime_gettime_ns:PTIME_MONOTONIC: %"PRIu64" ns\n", ns1);
 
+
+  ns1 = ptime_gettime_us(PTIME_REALTIME);
+  if (ns1 == 0) {
+    perror("ERROR: ptime_gettime_us:PTIME_REALTIME returned 0");
+    ret = 1;
+  }
+  printf("ptime_gettime_us:PTIME_REALTIME: %"PRIu64" us\n", ns1);
+
+  ns1 = ptime_gettime_us(PTIME_MONOTONIC);
+  if (ns1 == 0) {
+    perror("ERROR: ptime_gettime_us:PTIME_MONOTONIC returned 0");
+    ret = 1;
+  }
+  printf("ptime_gettime_us:PTIME_MONOTONIC: %"PRIu64" us\n", ns1);
+
   /* Test sleeping functions */
 
   ptime_us_to_timespec(SLEEP_TIME_US, &ts);
 
-  ns1 = ptime_gettime_ns(PTIME_MONOTONIC);
+  ns1 = ptime_gettime_us(PTIME_MONOTONIC);
   printf("Trying ptime_clock_nanosleep...\n");
   if (ptime_clock_nanosleep(&ts, NULL)) {
     perror("ptime_clock_nanosleep");
     ret = 1;
   }
-  ns2 = ptime_gettime_ns(PTIME_MONOTONIC);
-  verify_sleep(SLEEP_TIME_US, (ns2 - ns1) / ONE_THOUSAND_U64, &ret);
+  ns2 = ptime_gettime_us(PTIME_MONOTONIC);
+  verify_sleep(SLEEP_TIME_US, (ns2 - ns1), &ret);
 
-  ns1 = ptime_gettime_ns(PTIME_MONOTONIC);
+  ns1 = ptime_gettime_us(PTIME_MONOTONIC);
   printf("Trying ptime_sleep_us...\n");
   if (ptime_sleep_us(SLEEP_TIME_US)) {
     perror("ptime_sleep_us");
     ret = 1;
   }
-  ns2 = ptime_gettime_ns(PTIME_MONOTONIC);
-  verify_sleep(SLEEP_TIME_US, (ns2 - ns1) / ONE_THOUSAND_U64, &ret);
+  ns2 = ptime_gettime_us(PTIME_MONOTONIC);
+  verify_sleep(SLEEP_TIME_US, (ns2 - ns1), &ret);
 
-  ns1 = ptime_gettime_ns(PTIME_MONOTONIC);
+  ns1 = ptime_gettime_us(PTIME_MONOTONIC);
   printf("Trying ptime_sleep_us_no_interrupt...\n");
   if (ptime_sleep_us_no_interrupt(SLEEP_TIME_US)) {
     perror("ptime_sleep_us_no_interrupt");
     ret = 1;
   }
-  ns2 = ptime_gettime_ns(PTIME_MONOTONIC);
-  verify_sleep(SLEEP_TIME_US, (ns2 - ns1) / ONE_THOUSAND_U64, &ret);
+  ns2 = ptime_gettime_us(PTIME_MONOTONIC);
+  verify_sleep(SLEEP_TIME_US, (ns2 - ns1), &ret);
 
   return ret;
 }

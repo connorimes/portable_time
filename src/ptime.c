@@ -131,7 +131,7 @@ static int clock_gettime_monotonic_win32(struct timespec* ts) {
 
 static int nanosleep_win32(struct timespec* ts, struct timespec* rem) {
   (void) rem;
-  __int64 ns = (__int64) ptime_timespec_to_ns(ts);
+  uint64_t ns = ptime_timespec_to_ns(ts);
   HANDLE timer;
   LARGE_INTEGER ft;
   // Convert to 100 nanosecond interval, negative value indicates relative time
@@ -201,6 +201,23 @@ uint64_t ptime_gettime_ns(ptime_clock_id clk_id) {
     return 0;
   }
   return ptime_timespec_to_ns(&ts);
+}
+
+uint64_t ptime_gettime_us(ptime_clock_id clk_id) {
+  return ptime_gettime_ns(clk_id) / (uint64_t) ONE_THOUSAND;
+}
+
+int64_t ptime_gettime_elapsed_ns(ptime_clock_id clk_id, struct timespec* ts) {
+  struct timespec now;
+  ptime_clock_gettime(clk_id, &now);
+  int64_t result = (now.tv_sec - ts->tv_sec) * (int64_t) ONE_BILLION + ((int64_t) now.tv_nsec - ts->tv_nsec);
+  ts->tv_sec = now.tv_sec;
+  ts->tv_nsec = now.tv_nsec;
+  return result;
+}
+
+int64_t ptime_gettime_elapsed_us(ptime_clock_id clk_id, struct timespec* ts) {
+  return ptime_gettime_elapsed_ns(clk_id, ts) / (int64_t) ONE_THOUSAND;
 }
 
 int ptime_clock_nanosleep(struct timespec* ts, struct timespec* rem) {

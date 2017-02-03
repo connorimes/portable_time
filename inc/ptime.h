@@ -28,7 +28,9 @@ void ptime_us_to_timespec(uint64_t us, struct timespec* ts);
 
 int ptime_clock_gettime(ptime_clock_id clk_id, struct timespec* ts);
 uint64_t ptime_gettime_ns(ptime_clock_id clk_id);
-
+uint64_t ptime_gettime_us(ptime_clock_id clk_id);
+int64_t ptime_gettime_elapsed_ns(ptime_clock_id clk_id, struct timespec* ts);
+int64_t ptime_gettime_elapsed_us(ptime_clock_id clk_id, struct timespec* ts);
 
 /*
  * Sleeping
