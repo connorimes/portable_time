@@ -26,12 +26,19 @@ static void dummy_work() {
   for (i = 0; i < MAX_DUMMY_ITERS; i++);
 }
 
+/**
+ * Not all systems are very precise.
+ * Enforce that we slept at least 95% of, and not more than 5x, the requested time.
+ * Sleep functions usually guarantee a min sleep time (excluding interrupts), so 105% of the requested time may not be
+ * sufficiently tight.
+ * This at least keeps us within an order of magnitude, which are likely coding errors to make.
+ */
 static void verify_sleep(uint64_t expected_us, uint64_t actual_us, int* ret) {
-  if (actual_us < expected_us) {
-    // sleep failed
+  if ((double) actual_us + (expected_us / 20.0) < (double) expected_us) {
+    // sleep failed - more than 5% of time was remaining
     fprintf(stderr, "Only slept for %"PRIu64" us\n", actual_us);
     *ret = 1;
-  } else if (actual_us > (expected_us * 10)) {
+  } else if (actual_us > (expected_us * 5)) {
     // we slept for way too long - something might be wrong
     fprintf(stderr, "Slept for an unexpectedly high %"PRIu64" us\n", actual_us);
     *ret = 1;

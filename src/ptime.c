@@ -137,7 +137,8 @@ static int nanosleep_win32(struct timespec* ts, struct timespec* rem) {
   HANDLE timer;
   LARGE_INTEGER li;
   // negative value indicates relative time
-  li.QuadPart = -ns;
+  // rounds up to the next 100th nanosecond if needed
+  li.QuadPart = -((ns / 100) + (ns % 100 > 0 ? 1 : 0));
   if ((timer = CreateWaitableTimer(NULL, TRUE, NULL)) == NULL) {
     return -1;
   }
