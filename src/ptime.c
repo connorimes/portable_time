@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <time.h>
 #include "ptime.h"
 
@@ -140,7 +141,7 @@ static int nanosleep_win32(struct timespec* ts, struct timespec* rem) {
   LARGE_INTEGER ft;
   // Convert to 100 nanosecond interval, negative value indicates relative time
   // rounds up to the next interval
-  ft.QuadPart = -((ns / 100) + (ns % 100 ? 1 : 0));
+  ft.QuadPart = -((ns / 100) + (ns % 100 > 0 ? 1 : 0));
   if ((timer = CreateWaitableTimer(NULL, TRUE, NULL)) == NULL) {
     return -1;
   }
@@ -152,6 +153,7 @@ static int nanosleep_win32(struct timespec* ts, struct timespec* rem) {
   CloseHandle(timer);
   elapsed = ptime_gettime_ns(PTIME_MONOTONIC) - start;
   if (elapsed < ns) {
+    fprintf(stderr, "Warning: timer interrupted\n");
     if (rem != NULL) {
       ptime_ns_to_timespec(ns - elapsed, rem);
     }
@@ -232,20 +234,21 @@ int64_t ptime_gettime_elapsed_us(ptime_clock_id clk_id, struct timespec* ts) {
   return ptime_gettime_elapsed_ns(clk_id, ts) / (int64_t) ONE_THOUSAND;
 }
 
-int ptime_clock_nanosleep(struct timespec* ts, struct timespec* rem) {
+int ptime_nanosleep(struct timespec* ts, struct timespec* rem) {
 #if defined(__MACH__)
   return nanosleep(ts, rem);
 #elif defined(_WIN32)
   return nanosleep_win32(ts, rem);
 #else
-  return clock_nanosleep(CLOCK_REALTIME, 0, ts, rem);
+  errno = clock_nanosleep(PTIME_CLOCKID_T_MONOTONIC, 0, ts, rem);
+  return errno ? -1 : 0;
 #endif
 }
 
 int ptime_sleep_us(uint64_t us) {
   struct timespec ts;
   ptime_us_to_timespec(us, &ts);
-  return ptime_clock_nanosleep(&ts, NULL);
+  return ptime_nanosleep(&ts, NULL);
 }
 
 int ptime_sleep_us_no_interrupt(uint64_t us) {
@@ -253,14 +256,13 @@ int ptime_sleep_us_no_interrupt(uint64_t us) {
   struct timespec ts;
 #if defined(__MACH__) || defined(_WIN32)
   struct timespec rem;
-  ptime_ns_to_timespec(0, &rem);
-  // try to sleep for the requested period of time
-  ptime_us_to_timespec(us, &ts);
-  while ((ret = ptime_clock_nanosleep(&ts, &rem)) != 0 && errno == EINTR) {
-    // sleep some more
+  ptime_us_to_timespec(us, &rem);
+  do {
     ts.tv_sec = rem.tv_sec;
     ts.tv_nsec = rem.tv_nsec;
-  }
+    // try to sleep for the requested period of time
+    errno = 0;
+  } while ((ret = ptime_nanosleep(&ts, &rem)) != 0 && errno == EINTR);
 #else
   // keep sleeping until a time in the future (now + requested time interval)
   if (clock_gettime(PTIME_CLOCKID_T_MONOTONIC, &ts)) {

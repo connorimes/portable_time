@@ -36,7 +36,7 @@ int64_t ptime_gettime_elapsed_us(ptime_clock_id clk_id, struct timespec* ts);
  * Sleeping
  */
 
-int ptime_clock_nanosleep(struct timespec* ts, struct timespec* rem);
+int ptime_nanosleep(struct timespec* ts, struct timespec* rem);
 int ptime_sleep_us(uint64_t us);
 int ptime_sleep_us_no_interrupt(uint64_t us);
 

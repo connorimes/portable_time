@@ -129,9 +129,9 @@ int main(void) {
   ptime_us_to_timespec(SLEEP_TIME_US, &ts);
 
   ns1 = ptime_gettime_us(PTIME_MONOTONIC);
-  printf("Trying ptime_clock_nanosleep...\n");
-  if (ptime_clock_nanosleep(&ts, NULL)) {
-    perror("ptime_clock_nanosleep");
+  printf("Trying ptime_nanosleep...\n");
+  if (ptime_nanosleep(&ts, NULL)) {
+    perror("ptime_nanosleep");
     ret = 1;
   }
   ns2 = ptime_gettime_us(PTIME_MONOTONIC);
