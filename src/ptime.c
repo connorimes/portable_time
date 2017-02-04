@@ -94,10 +94,11 @@ static int clock_gettime_realtime_win32(struct timespec* ts) {
   FILETIME f;
   LARGE_INTEGER t;
   double nanoseconds;
-  // TODO: thread-safe initializer (currently a second thread can run before init completes)
-  if (InterlockedExchange(&g_first_time, 0)) {
+  // TODO: thread-safe initializer
+  if (g_first_time) {
     offset = getFILETIMEoffset();
     frequencyToNanoseconds = 0.010;
+    g_first_time = 0;
   }
   GetSystemTimeAsFileTime(&f);
   t.QuadPart = f.dwHighDateTime;
@@ -115,11 +116,12 @@ static int clock_gettime_monotonic_win32(struct timespec* ts) {
   static LONG g_first_time = 1;
   static LARGE_INTEGER g_counts_per_sec;
   LARGE_INTEGER count;
-  // TODO: thread-safe initializer (currently a second thread can run before init completes)
-  if (InterlockedExchange(&g_first_time, 0)) {
+  // TODO: thread-safe initializer
+  if (g_first_time) {
     if (QueryPerformanceFrequency(&g_counts_per_sec) == 0) {
       g_counts_per_sec.QuadPart = 0;
     }
+    g_first_time = 0;
   }
   if (g_counts_per_sec.QuadPart <= 0 || QueryPerformanceCounter(&count) == 0) {
     return -1;
@@ -130,7 +132,9 @@ static int clock_gettime_monotonic_win32(struct timespec* ts) {
 }
 
 static int nanosleep_win32(struct timespec* ts, struct timespec* rem) {
-  (void) rem;
+  // Actually seen this fail to sleep for the entire time, so we use "rem"
+  uint64_t elapsed;
+  uint64_t start = ptime_gettime_ns(PTIME_MONOTONIC);
   uint64_t ns = ptime_timespec_to_ns(ts);
   HANDLE timer;
   LARGE_INTEGER ft;
@@ -146,6 +150,14 @@ static int nanosleep_win32(struct timespec* ts, struct timespec* rem) {
   }
   WaitForSingleObject(timer, INFINITE);
   CloseHandle(timer);
+  elapsed = ptime_gettime_ns(PTIME_MONOTONIC) - start;
+  if (elapsed < ns) {
+    if (rem != NULL) {
+      ptime_ns_to_timespec(ns - elapsed, rem);
+    }
+    errno = EINTR;
+    return -1;
+  }
   return 0;
 }
 #endif // _WIN32
