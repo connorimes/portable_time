@@ -11,7 +11,6 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <time.h>
 #include "ptime.h"
 
@@ -133,33 +132,21 @@ static int clock_gettime_monotonic_win32(struct timespec* ts) {
 }
 
 static int nanosleep_win32(struct timespec* ts, struct timespec* rem) {
-  // Actually seen this fail to sleep for the entire time, so we use "rem"
-  uint64_t elapsed;
-  uint64_t start = ptime_gettime_ns(PTIME_MONOTONIC);
+  (void) rem;
   uint64_t ns = ptime_timespec_to_ns(ts);
   HANDLE timer;
-  LARGE_INTEGER ft;
-  // Convert to 100 nanosecond interval, negative value indicates relative time
-  // rounds up to the next interval
-  ft.QuadPart = -((ns / 100) + (ns % 100 > 0 ? 1 : 0));
+  LARGE_INTEGER li;
+  // negative value indicates relative time
+  li.QuadPart = -ns;
   if ((timer = CreateWaitableTimer(NULL, TRUE, NULL)) == NULL) {
     return -1;
   }
-  if (!SetWaitableTimer(timer, &ft, 0, NULL, NULL, 0)) {
+  if (!SetWaitableTimer(timer, &li, 0, NULL, NULL, 0)) {
     CloseHandle(timer);
     return -1;
   }
   WaitForSingleObject(timer, INFINITE);
   CloseHandle(timer);
-  elapsed = ptime_gettime_ns(PTIME_MONOTONIC) - start;
-  if (elapsed < ns) {
-    fprintf(stderr, "Warning: timer interrupted\n");
-    if (rem != NULL) {
-      ptime_ns_to_timespec(ns - elapsed, rem);
-    }
-    errno = EINTR;
-    return -1;
-  }
   return 0;
 }
 #endif // _WIN32
@@ -223,7 +210,9 @@ uint64_t ptime_gettime_us(ptime_clock_id clk_id) {
 
 int64_t ptime_gettime_elapsed_ns(ptime_clock_id clk_id, struct timespec* ts) {
   struct timespec now;
-  ptime_clock_gettime(clk_id, &now);
+  if (ptime_clock_gettime(clk_id, &now)) {
+    return 0;
+  }
   int64_t result = (now.tv_sec - ts->tv_sec) * (int64_t) ONE_BILLION + ((int64_t) now.tv_nsec - ts->tv_nsec);
   ts->tv_sec = now.tv_sec;
   ts->tv_nsec = now.tv_nsec;
@@ -262,7 +251,8 @@ int ptime_sleep_us_no_interrupt(uint64_t us) {
     ts.tv_nsec = rem.tv_nsec;
     // try to sleep for the requested period of time
     errno = 0;
-  } while ((ret = ptime_nanosleep(&ts, &rem)) != 0 && errno == EINTR);
+    ret = ptime_nanosleep(&ts, &rem);
+  } while (ret != 0 && errno == EINTR);
 #else
   // keep sleeping until a time in the future (now + requested time interval)
   if (clock_gettime(PTIME_CLOCKID_T_MONOTONIC, &ts)) {

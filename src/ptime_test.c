@@ -83,6 +83,9 @@ int main(void) {
 
   elapsed = ptime_gettime_elapsed_ns(PTIME_REALTIME, &ts);
   printf("ptime_gettime_elapsed_ns:PTIME_REALTIME: %"PRIi64" ns\n", elapsed);
+  if (elapsed == 0 && errno) {
+  	perror("ptime_gettime_elapsed_ns:PTIME_REALTIME");
+  }
 
   if (ptime_clock_gettime(PTIME_MONOTONIC, &ts)) {
     perror("ERROR: ptime_clock_gettime:PTIME_MONOTONIC");
@@ -94,6 +97,9 @@ int main(void) {
 
   elapsed = ptime_gettime_elapsed_us(PTIME_MONOTONIC, &ts);
   printf("ptime_gettime_elapsed_us:PTIME_MONOTONIC: %"PRIi64" us\n", elapsed);
+  if (elapsed == 0 && errno) {
+  	perror("ptime_gettime_elapsed_us:PTIME_MONOTONIC");
+  }
 
   ns1 = ptime_gettime_ns(PTIME_REALTIME);
   if (ns1 == 0) {
