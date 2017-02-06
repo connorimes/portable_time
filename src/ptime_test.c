@@ -161,7 +161,7 @@ int main(void) {
 
   ns1 = ptime_gettime_us(PTIME_MONOTONIC);
   printf("Trying ptime_sleep_us_no_interrupt...\n");
-  if (ptime_sleep_us_no_interrupt(SLEEP_TIME_US)) {
+  if (ptime_sleep_us_no_interrupt(SLEEP_TIME_US, NULL)) {
     perror("ptime_sleep_us_no_interrupt");
     ret = 1;
   }

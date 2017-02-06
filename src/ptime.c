@@ -1,5 +1,7 @@
 /*
- * Some various functions for getting timestamps.
+ * Some various functions for dealing with time and sleeping.
+ *
+ * These are meant to be as portable as possible, though "struct timespec" must be defined.
  *
  * Many thanks to online sources, like:
  *   http://stackoverflow.com/questions/5167269/clock-gettime-alternative-in-mac-os-x
@@ -7,6 +9,9 @@
  *   http://nadeausoftware.com/articles/2012/04/c_c_tip_how_measure_elapsed_real_time_benchmarking
  *   http://stackoverflow.com/questions/5404277/porting-clock-gettime-to-windows
  *   http://stackoverflow.com/questions/5801813/c-usleep-is-obsolete-workarounds-for-windows-mingw
+ *
+ * @author Connor Imes
+ * @date 2017-02-01
  */
 #include <errno.h>
 #include <inttypes.h>
@@ -241,7 +246,7 @@ int ptime_sleep_us(uint64_t us) {
   return ptime_nanosleep(&ts, NULL);
 }
 
-int ptime_sleep_us_no_interrupt(uint64_t us) {
+int ptime_sleep_us_no_interrupt(uint64_t us, volatile const int* ignore_interrupt) {
   int ret;
   struct timespec ts;
 #if defined(__MACH__) || defined(_WIN32)
@@ -253,7 +258,7 @@ int ptime_sleep_us_no_interrupt(uint64_t us) {
     // try to sleep for the requested period of time
     errno = 0;
     ret = ptime_nanosleep(&ts, &rem);
-  } while (ret != 0 && errno == EINTR);
+  } while (ret != 0 && errno == EINTR && (ignore_interrupt == NULL ? 1 : *ignore_interrupt));
 #else
   // keep sleeping until a time in the future (now + requested time interval)
   if (clock_gettime(PTIME_CLOCKID_T_MONOTONIC, &ts)) {
@@ -265,7 +270,10 @@ int ptime_sleep_us_no_interrupt(uint64_t us) {
     ts.tv_nsec -= (long) ONE_BILLION;
     ts.tv_sec++;
   }
-  while ((ret = clock_nanosleep(PTIME_CLOCKID_T_MONOTONIC, TIMER_ABSTIME, &ts, NULL)) == EINTR);
+  do {
+    ret = clock_nanosleep(PTIME_CLOCKID_T_MONOTONIC, TIMER_ABSTIME, &ts, NULL);
+  }
+  while (ret == EINTR && (ignore_interrupt == NULL ? 1 : *ignore_interrupt));
 #endif
-  return ret;
+  return ret ? -1 : 0;
 }
