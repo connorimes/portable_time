@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <errno.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -21,7 +22,7 @@ static const uint64_t TOTAL_USEC_U64 = (uint64_t) SEC * ONE_MILLION + NSEC / ONE
 
 static const uint64_t MAX_DUMMY_ITERS = (uint64_t) ONE_MILLION;
 
-static void dummy_work() {
+static void dummy_work(void) {
   uint64_t i;
   for (i = 0; i < MAX_DUMMY_ITERS; i++);
 }

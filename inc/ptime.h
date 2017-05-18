@@ -13,6 +13,7 @@
 extern "C" {
 #endif
 
+#define _GNU_SOURCE
 #include <inttypes.h>
 #include <time.h>
 

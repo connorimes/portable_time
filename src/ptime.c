@@ -13,6 +13,7 @@
  * @author Connor Imes
  * @date 2017-02-01
  */
+#define _GNU_SOURCE
 #include <errno.h>
 #include <inttypes.h>
 #include <stdlib.h>
