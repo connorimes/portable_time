@@ -75,7 +75,7 @@ static int clock_gettime_mach(clock_id_t clk_id, struct timespec* ts) {
 #endif // __MACH__
 
 #if defined(_WIN32)
-static LARGE_INTEGER getFILETIMEoffset() {
+static LARGE_INTEGER getFILETIMEoffset(void) {
   SYSTEMTIME s;
   FILETIME f;
   LARGE_INTEGER t;
