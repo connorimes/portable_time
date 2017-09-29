@@ -227,22 +227,26 @@ int64_t ptime_gettime_elapsed_us(ptime_clock_id clk_id, uint64_t since) {
   return ptime_gettime_elapsed_ns(clk_id, since) / (int64_t) ONE_THOUSAND;
 }
 
-uint64_t ptime_nanosleep(uint64_t ns) {
-  struct timespec ts;
-  struct timespec rem;
-  ptime_ns_to_timespec(ns, &ts);
+static int ptime_nanosleep(struct timespec* ts, struct timespec* rem) {
 #if defined(__MACH__)
-  return nanosleep(&ts, &rem) ? ptime_timespec_to_ns(&rem) : 0;
+  return nanosleep(ts, rem);
 #elif defined(_WIN32)
-  return nanosleep_win32(&ts, &rem);
+  return nanosleep_win32(ts, rem);
 #else
-  errno = clock_nanosleep(PTIME_CLOCKID_T_MONOTONIC, 0, &ts, &rem);
-  return errno ? ptime_timespec_to_ns(&rem) : 0;
+  errno = clock_nanosleep(PTIME_CLOCKID_T_MONOTONIC, 0, ts, rem);
+  return errno ? -1 : 0;
 #endif
 }
 
+uint64_t ptime_sleep_ns(uint64_t ns) {
+  struct timespec ts;
+  struct timespec rem;
+  ptime_ns_to_timespec(ns, &ts);
+  return ptime_nanosleep(&ts, &rem) ? ptime_timespec_to_ns(&rem) : 0;
+}
+
 uint64_t ptime_sleep_us(uint64_t us) {
-  return ptime_nanosleep(us * (uint64_t) ONE_THOUSAND) / (uint64_t) ONE_THOUSAND;
+  return ptime_sleep_ns(us * (uint64_t) ONE_THOUSAND) / (uint64_t) ONE_THOUSAND;
 }
 
 int ptime_sleep_us_no_interrupt(uint64_t us, volatile const int* ignore_interrupt) {

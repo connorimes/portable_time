@@ -87,9 +87,9 @@ int main(void) {
   /* Test sleeping functions */
 
   ns1 = ptime_gettime_us(PTIME_MONOTONIC);
-  printf("Trying ptime_nanosleep...\n");
-  if (ptime_nanosleep(SLEEP_TIME_NS)) {
-    perror("ptime_nanosleep");
+  printf("Trying ptime_sleep_ns...\n");
+  if (ptime_sleep_ns(SLEEP_TIME_NS)) {
+    perror("ptime_sleep_ns");
     ret = 1;
   }
   ns2 = ptime_gettime_us(PTIME_MONOTONIC);

@@ -74,7 +74,7 @@ int64_t ptime_gettime_elapsed_us(ptime_clock_id clk_id, uint64_t since);
  *
  * @return 0 on success, remaining nanoseconds otherwise
  */
-uint64_t ptime_nanosleep(uint64_t ns);
+uint64_t ptime_sleep_ns(uint64_t ns);
 
 /**
  * Sleep for the given number of microseconds.
