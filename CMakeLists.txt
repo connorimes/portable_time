@@ -19,12 +19,10 @@ if(NOT LIBRT)
   set(LIBRT "")
 endif()
 
-include_directories(${PROJECT_SOURCE_DIR}/inc)
-
 # Tests
 
 enable_testing()
 
-add_executable(ptime_test src/ptime_test.c src/ptime.c)
+add_executable(ptime_test ptime_test.c ptime.c)
 target_link_libraries(ptime_test ${LIBRT})
 add_test(ptime_test ${EXECUTABLE_OUTPUT_PATH}/ptime_test)
