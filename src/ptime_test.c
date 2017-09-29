@@ -1,26 +1,12 @@
-#define _GNU_SOURCE
 #include <errno.h>
 #include <inttypes.h>
 #include <stdio.h>
-#include <time.h>
 #include "ptime.h"
 
 #define SLEEP_TIME_US 1000000
+#define SLEEP_TIME_NS (SLEEP_TIME_US * 1000)
 
-#define ONE_BILLION 1000000000
-#define ONE_MILLION 1000000
-#define ONE_THOUSAND 1000
-
-#define SEC 3
-#define NSEC 987654321
-#define USEC_NSEC NSEC / ONE_THOUSAND * ONE_THOUSAND
-
-static const time_t SEC_U64 = (uint64_t) SEC;
-static const uint64_t NSEC_U64 = (uint64_t) NSEC;
-static const uint64_t TOTAL_NSEC_U64 = (uint64_t) SEC * ONE_BILLION + NSEC;
-static const uint64_t TOTAL_USEC_U64 = (uint64_t) SEC * ONE_MILLION + NSEC / ONE_THOUSAND;
-
-static const uint64_t MAX_DUMMY_ITERS = (uint64_t) ONE_MILLION;
+static const uint64_t MAX_DUMMY_ITERS = 1000000;
 
 static void dummy_work(void) {
   uint64_t i;
@@ -47,67 +33,11 @@ static void verify_sleep(uint64_t expected_us, uint64_t actual_us, int* ret) {
 }
 
 int main(void) {
-  struct timespec ts;
   uint64_t ns1, ns2;
   int64_t elapsed;
   int ret = 0;
 
-  /* Test conversions */
-
-  ts.tv_sec = SEC_U64;
-  ts.tv_nsec = NSEC_U64;
-  ns1 = ptime_timespec_to_ns(&ts);
-  printf("ptime_timespec_to_ns: %"PRIu64" ns\n", ns1);
-  if (ns1 != TOTAL_NSEC_U64) {
-    fprintf(stderr, "ERROR: ptime_timespec_to_ns\n");
-    ret = 1;
-  }
-  ns1 = ptime_timespec_to_us(&ts);
-  printf("ptime_timespec_to_us: %"PRIu64" us\n", ns1);
-  if (ns1 != TOTAL_USEC_U64) {
-    fprintf(stderr, "ERROR: ptime_timespec_to_us\n");
-    ret = 1;
-  }
-  ptime_ns_to_timespec(TOTAL_NSEC_U64, &ts);
-  if (ts.tv_sec != SEC || ts.tv_nsec != NSEC) {
-    fprintf(stderr, "ERROR: ptime_ns_to_timespec\n");
-    ret = 1;
-  }
-  ptime_us_to_timespec(TOTAL_USEC_U64, &ts);
-  if (ts.tv_sec != SEC || ts.tv_nsec != USEC_NSEC) {
-    fprintf(stderr, "ERROR: ptime_us_to_timespec\n");
-    ret = 1;
-  }
-
   /* Test timing functions */
-
-  if (ptime_clock_gettime(PTIME_REALTIME, &ts)) {
-    perror("ERROR: ptime_clock_gettime:PTIME_REALTIME");
-    ret = 1;
-  }
-  printf("ptime_clock_gettime:PTIME_REALTIME: %ld sec, %ld ns\n", ts.tv_sec, ts.tv_nsec);
-
-  dummy_work();
-
-  elapsed = ptime_gettime_elapsed_ns(PTIME_REALTIME, &ts);
-  printf("ptime_gettime_elapsed_ns:PTIME_REALTIME: %"PRIi64" ns\n", elapsed);
-  if (elapsed == 0 && errno) {
-  	perror("ptime_gettime_elapsed_ns:PTIME_REALTIME");
-  }
-
-  if (ptime_clock_gettime(PTIME_MONOTONIC, &ts)) {
-    perror("ERROR: ptime_clock_gettime:PTIME_MONOTONIC");
-    ret = 1;
-  }
-  printf("ptime_clock_gettime:PTIME_MONOTONIC: %ld sec, %ld ns\n", ts.tv_sec, ts.tv_nsec);
-
-  dummy_work();
-
-  elapsed = ptime_gettime_elapsed_us(PTIME_MONOTONIC, &ts);
-  printf("ptime_gettime_elapsed_us:PTIME_MONOTONIC: %"PRIi64" us\n", elapsed);
-  if (elapsed == 0 && errno) {
-  	perror("ptime_gettime_elapsed_us:PTIME_MONOTONIC");
-  }
 
   ns1 = ptime_gettime_ns(PTIME_REALTIME);
   if (ns1 == 0) {
@@ -123,7 +53,6 @@ int main(void) {
   }
   printf("ptime_gettime_ns:PTIME_MONOTONIC: %"PRIu64" ns\n", ns1);
 
-
   ns1 = ptime_gettime_us(PTIME_REALTIME);
   if (ns1 == 0) {
     perror("ERROR: ptime_gettime_us:PTIME_REALTIME returned 0");
@@ -138,13 +67,28 @@ int main(void) {
   }
   printf("ptime_gettime_us:PTIME_MONOTONIC: %"PRIu64" us\n", ns1);
 
-  /* Test sleeping functions */
 
-  ptime_us_to_timespec(SLEEP_TIME_US, &ts);
+  ns1 = ptime_gettime_ns(PTIME_REALTIME);
+  dummy_work();
+  elapsed = ptime_gettime_elapsed_ns(PTIME_REALTIME, ns1);
+  printf("ptime_gettime_elapsed_ns:PTIME_REALTIME: %"PRIi64" ns\n", elapsed);
+  if (elapsed == 0 && errno) {
+    perror("ptime_gettime_elapsed_ns:PTIME_REALTIME");
+  }
+
+  ns1 = ptime_gettime_ns(PTIME_MONOTONIC);
+  dummy_work();
+  elapsed = ptime_gettime_elapsed_us(PTIME_MONOTONIC, ns1);
+  printf("ptime_gettime_elapsed_us:PTIME_MONOTONIC: %"PRIi64" us\n", elapsed);
+  if (elapsed == 0 && errno) {
+    perror("ptime_gettime_elapsed_us:PTIME_MONOTONIC");
+  }
+
+  /* Test sleeping functions */
 
   ns1 = ptime_gettime_us(PTIME_MONOTONIC);
   printf("Trying ptime_nanosleep...\n");
-  if (ptime_nanosleep(&ts, NULL)) {
+  if (ptime_nanosleep(SLEEP_TIME_NS)) {
     perror("ptime_nanosleep");
     ret = 1;
   }

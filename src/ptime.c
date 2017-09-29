@@ -2,6 +2,9 @@
  * Some various functions for dealing with time and sleeping.
  *
  * These are meant to be as portable as possible, though "struct timespec" must be defined.
+ * _GNU_SOURCE should be defined before the first inclusion of time.h.
+ * The timespec struct used to be used in the interface, but this forced users to define _GNU_SOURCE even when they
+ * didn't otherwise need it, so we'll just use 64 bit types for better portability in the interface.
  *
  * Many thanks to online sources, like:
  *   http://stackoverflow.com/questions/5167269/clock-gettime-alternative-in-mac-os-x
@@ -57,6 +60,23 @@ static const clockid_t PTIME_CLOCKID_T_MONOTONIC =
 #define ONE_THOUSAND 1000
 #define ONE_MILLION  1000000
 #define ONE_BILLION  1000000000
+
+static uint64_t ptime_timespec_to_ns(struct timespec* ts) {
+  // must cast as a simple literal can overflow!
+  return ts->tv_sec * (uint64_t) ONE_BILLION + ts->tv_nsec;
+}
+
+static void ptime_ns_to_timespec(uint64_t ns, struct timespec* ts) {
+  ts->tv_sec = ns / (time_t) ONE_BILLION;
+  ts->tv_nsec = ns % (long) ONE_BILLION;
+}
+
+#if defined(__MACH__) || defined(_WIN32)
+static void ptime_us_to_timespec(uint64_t us, struct timespec* ts) {
+  ts->tv_sec = us / (time_t) ONE_MILLION;
+  ts->tv_nsec = (us % (long) ONE_MILLION) * (long) ONE_THOUSAND;
+}
+#endif
 
 #if defined(__MACH__)
 static int clock_gettime_mach(clock_id_t clk_id, struct timespec* ts) {
@@ -158,27 +178,7 @@ static int nanosleep_win32(struct timespec* ts, struct timespec* rem) {
 }
 #endif // _WIN32
 
-uint64_t ptime_timespec_to_ns(struct timespec* ts) {
-  // must cast as a simple literal can overflow!
-  return ts->tv_sec * (uint64_t) ONE_BILLION + ts->tv_nsec;
-}
-
-uint64_t ptime_timespec_to_us(struct timespec* ts) {
-  // must cast as a simple literal can overflow!
-  return ts->tv_sec * (uint64_t) ONE_MILLION + (ts->tv_nsec / (uint64_t) ONE_THOUSAND);
-}
-
-void ptime_ns_to_timespec(uint64_t ns, struct timespec* ts) {
-  ts->tv_sec = ns / (time_t) ONE_BILLION;
-  ts->tv_nsec = ns % (long) ONE_BILLION;
-}
-
-void ptime_us_to_timespec(uint64_t us, struct timespec* ts) {
-  ts->tv_sec = us / (time_t) ONE_MILLION;
-  ts->tv_nsec = (us % (long) ONE_MILLION) * (long) ONE_THOUSAND;
-}
-
-int ptime_clock_gettime(ptime_clock_id clk_id, struct timespec* ts) {
+static int ptime_clock_gettime(ptime_clock_id clk_id, struct timespec* ts) {
   switch(clk_id) {
 #if defined(__MACH__)
     case PTIME_REALTIME:
@@ -215,36 +215,34 @@ uint64_t ptime_gettime_us(ptime_clock_id clk_id) {
   return ptime_gettime_ns(clk_id) / (uint64_t) ONE_THOUSAND;
 }
 
-int64_t ptime_gettime_elapsed_ns(ptime_clock_id clk_id, struct timespec* ts) {
-  struct timespec now;
-  if (ptime_clock_gettime(clk_id, &now)) {
+int64_t ptime_gettime_elapsed_ns(ptime_clock_id clk_id, uint64_t since) {
+  uint64_t now = ptime_gettime_ns(clk_id);
+  if (now == 0 && errno) {
     return 0;
   }
-  int64_t result = (now.tv_sec - ts->tv_sec) * (int64_t) ONE_BILLION + ((int64_t) now.tv_nsec - ts->tv_nsec);
-  ts->tv_sec = now.tv_sec;
-  ts->tv_nsec = now.tv_nsec;
-  return result;
+  return ((int64_t) now) - ((int64_t) since);
 }
 
-int64_t ptime_gettime_elapsed_us(ptime_clock_id clk_id, struct timespec* ts) {
-  return ptime_gettime_elapsed_ns(clk_id, ts) / (int64_t) ONE_THOUSAND;
+int64_t ptime_gettime_elapsed_us(ptime_clock_id clk_id, uint64_t since) {
+  return ptime_gettime_elapsed_ns(clk_id, since) / (int64_t) ONE_THOUSAND;
 }
 
-int ptime_nanosleep(struct timespec* ts, struct timespec* rem) {
+uint64_t ptime_nanosleep(uint64_t ns) {
+  struct timespec ts;
+  struct timespec rem;
+  ptime_ns_to_timespec(ns, &ts);
 #if defined(__MACH__)
-  return nanosleep(ts, rem);
+  return nanosleep(&ts, &rem) ? ptime_timespec_to_ns(&rem) : 0;
 #elif defined(_WIN32)
-  return nanosleep_win32(ts, rem);
+  return nanosleep_win32(&ts, &rem);
 #else
-  errno = clock_nanosleep(PTIME_CLOCKID_T_MONOTONIC, 0, ts, rem);
-  return errno ? -1 : 0;
+  errno = clock_nanosleep(PTIME_CLOCKID_T_MONOTONIC, 0, &ts, &rem);
+  return errno ? ptime_timespec_to_ns(&rem) : 0;
 #endif
 }
 
-int ptime_sleep_us(uint64_t us) {
-  struct timespec ts;
-  ptime_us_to_timespec(us, &ts);
-  return ptime_nanosleep(&ts, NULL);
+uint64_t ptime_sleep_us(uint64_t us) {
+  return ptime_nanosleep(us * (uint64_t) ONE_THOUSAND) / (uint64_t) ONE_THOUSAND;
 }
 
 int ptime_sleep_us_no_interrupt(uint64_t us, volatile const int* ignore_interrupt) {
