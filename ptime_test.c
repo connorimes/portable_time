@@ -33,8 +33,7 @@ static void verify_sleep(uint64_t expected_us, uint64_t actual_us, int* ret) {
 }
 
 int main(void) {
-  uint64_t ns1, ns2;
-  int64_t elapsed;
+  uint64_t ns1, ns2, elapsed;
   int ret = 0;
 
   /* Test timing functions */
@@ -70,16 +69,18 @@ int main(void) {
 
   ns1 = ptime_gettime_ns(PTIME_REALTIME);
   dummy_work();
-  elapsed = ptime_gettime_elapsed_ns(PTIME_REALTIME, ns1);
-  printf("ptime_gettime_elapsed_ns:PTIME_REALTIME: %"PRIi64" ns\n", elapsed);
+  errno = 0;
+  elapsed = ptime_gettime_elapsed_ns(PTIME_REALTIME, &ns1);
+  printf("ptime_gettime_elapsed_ns:PTIME_REALTIME: %"PRIu64" ns\n", elapsed);
   if (elapsed == 0 && errno) {
     perror("ptime_gettime_elapsed_ns:PTIME_REALTIME");
   }
 
   ns1 = ptime_gettime_ns(PTIME_MONOTONIC);
   dummy_work();
-  elapsed = ptime_gettime_elapsed_us(PTIME_MONOTONIC, ns1);
-  printf("ptime_gettime_elapsed_us:PTIME_MONOTONIC: %"PRIi64" us\n", elapsed);
+  errno = 0;
+  elapsed = ptime_gettime_elapsed_us(PTIME_MONOTONIC, &ns1);
+  printf("ptime_gettime_elapsed_us:PTIME_MONOTONIC: %"PRIu64" us\n", elapsed);
   if (elapsed == 0 && errno) {
     perror("ptime_gettime_elapsed_us:PTIME_MONOTONIC");
   }

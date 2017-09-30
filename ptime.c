@@ -215,16 +215,23 @@ uint64_t ptime_gettime_us(ptime_clock_id clk_id) {
   return ptime_gettime_ns(clk_id) / (uint64_t) ONE_THOUSAND;
 }
 
-int64_t ptime_gettime_elapsed_ns(ptime_clock_id clk_id, uint64_t since) {
-  uint64_t now = ptime_gettime_ns(clk_id);
-  if (now == 0 && errno) {
+uint64_t ptime_gettime_elapsed_ns(ptime_clock_id clk_id, uint64_t* since) {
+  uint64_t now;
+  uint64_t elapsed;
+  if (!(now = ptime_gettime_ns(PTIME_MONOTONIC))) {
     return 0;
   }
-  return ((int64_t) now) - ((int64_t) since);
+  if (*since > now) {
+    errno = EINVAL;
+    return 0;
+  }
+  elapsed = now - *since;
+  *since = now;
+  return elapsed;
 }
 
-int64_t ptime_gettime_elapsed_us(ptime_clock_id clk_id, uint64_t since) {
-  return ptime_gettime_elapsed_ns(clk_id, since) / (int64_t) ONE_THOUSAND;
+uint64_t ptime_gettime_elapsed_us(ptime_clock_id clk_id, uint64_t* since) {
+  return ptime_gettime_elapsed_ns(clk_id, since) / (uint64_t) ONE_THOUSAND;
 }
 
 static int ptime_nanosleep(struct timespec* ts, struct timespec* rem) {
