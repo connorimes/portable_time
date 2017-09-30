@@ -7,16 +7,13 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_FORTIFY_SOURCE=2 -fstack-protector -g3 -p
 
 # Dependencies
 
-if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+if(UNIX AND NOT ${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
   # Determine if we should link with librt for libraries that use "clock_gettime"
   include(CheckFunctionExists)
   CHECK_FUNCTION_EXISTS(clock_gettime HAVE_CLOCK_GETTIME)
   if(NOT HAVE_CLOCK_GETTIME)
     find_library(LIBRT NAMES rt)
   endif()
-endif()
-if(NOT LIBRT)
-  set(LIBRT "")
 endif()
 
 # Tests
