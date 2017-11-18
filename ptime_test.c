@@ -74,15 +74,17 @@ int main(void) {
   printf("ptime_gettime_elapsed_ns:PTIME_REALTIME: %"PRIu64" ns\n", elapsed);
   if (elapsed == 0 && errno) {
     perror("ptime_gettime_elapsed_ns:PTIME_REALTIME");
+    ret = 1;
   }
 
-  ns1 = ptime_gettime_ns(PTIME_MONOTONIC);
+  ns1 = ptime_gettime_us(PTIME_MONOTONIC);
   dummy_work();
   errno = 0;
   elapsed = ptime_gettime_elapsed_us(PTIME_MONOTONIC, &ns1);
   printf("ptime_gettime_elapsed_us:PTIME_MONOTONIC: %"PRIu64" us\n", elapsed);
   if (elapsed == 0 && errno) {
     perror("ptime_gettime_elapsed_us:PTIME_MONOTONIC");
+    ret = 1;
   }
 
   /* Test sleeping functions */
