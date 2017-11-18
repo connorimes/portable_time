@@ -6,11 +6,15 @@
 #define SLEEP_TIME_US 1000000
 #define SLEEP_TIME_NS (SLEEP_TIME_US * 1000)
 
-static const uint64_t MAX_DUMMY_ITERS = 1000000;
+static const uint64_t MAX_DUMMY_ITERS = 10000000;
 
 static void dummy_work(void) {
   uint64_t i;
-  for (i = 0; i < MAX_DUMMY_ITERS; i++);
+  volatile int dummy = 0;
+  for (i = 0; i < MAX_DUMMY_ITERS; i++) {
+    dummy = 0;
+  }
+  (void) dummy;
 }
 
 /**
